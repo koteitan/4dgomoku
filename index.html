@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>4D Gomoku - 四次元五目並べ</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #111;
+      min-height: 100vh;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+
+    h1 {
+      margin-bottom: 10px;
+      font-size: 2em;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+    }
+
+    .subtitle {
+      font-size: 0.9em;
+      color: #888;
+      margin-bottom: 20px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      flex-wrap: nowrap;
+      justify-content: space-between;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .control-group label {
+      font-size: 0.85em;
+      color: #aaa;
+    }
+
+    select, button {
+      padding: 5px 10px;
+      font-size: 0.85em;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      height: 32px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    select {
+      background: #2a2a4a;
+      color: #fff;
+    }
+
+    select:hover {
+      background: #3a3a5a;
+    }
+
+    button {
+      background: #444;
+      color: #fff;
+      font-weight: bold;
+    }
+
+    button:hover {
+      background: #555;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    #status {
+      font-size: 0.85em;
+      padding: 0 10px;
+      background: #111;
+      text-align: center;
+      height: 32px;
+      line-height: 32px;
+      box-sizing: border-box;
+      flex: 1;
+      min-width: 0;
+    }
+
+    #status.black-turn {
+      border: 2px solid #228B22;
+      background: #111;
+      line-height: 28px;
+    }
+
+    #status.white-turn {
+      border: 2px solid #8B0000;
+      background: #111;
+      line-height: 28px;
+    }
+
+    #status.winner {
+      background: #333;
+      border: 2px solid #fff;
+      line-height: 28px;
+      animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.02); }
+    }
+
+    .canvas-container {
+      background: rgba(0,0,0,0.3);
+      padding: 10px;
+      border-radius: 10px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+      overflow: auto;
+      max-width: 95vw;
+      max-height: 80vh;
+    }
+
+    #gameCanvas {
+      display: block;
+      cursor: none;
+    }
+
+    .info {
+      margin-top: 20px;
+      font-size: 0.85em;
+      color: #666;
+      text-align: center;
+    }
+
+    #status.thinking {
+      border: 2px solid #8B0000;
+      background: #111;
+      line-height: 28px;
+      animation: blink 1s infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+
+    .coordinate-info {
+      margin-top: 10px;
+      font-size: 0.9em;
+      color: #aaa;
+    }
+  </style>
+</head>
+<body>
+  <h1>4D Gomoku</h1>
+  <p class="subtitle">四次元五目並べ (9x9x9x9)</p>
+
+  <div class="controls">
+    <div id="status"></div>
+    <select id="playerColor">
+      <option value="black">1st: You</option>
+      <option value="white">1st: Com</option>
+    </select>
+    <select id="aiSelect">
+      <!-- AIオプションはJSで動的に追加 -->
+    </select>
+    <button id="newGameBtn">Reset</button>
+  </div>
+
+  <div class="canvas-container">
+    <canvas id="gameCanvas"></canvas>
+  </div>
+
+  <div class="coordinate-info" id="coordInfo"></div>
+
+  <div class="info">
+    <p>81個の9x9ボードが9x9グリッドに配置されています</p>
+    <p>各ボード内が(x,y)座標、ボードの位置が(z,w)座標です</p>
+    <p>4次元空間で5つ並べたら勝ち</p>
+  </div>
+
+  <script src="ai-base.js"></script>
+  <script src="ai-random.js"></script>
+  <script src="ai-minimax.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
