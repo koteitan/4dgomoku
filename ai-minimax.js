@@ -19,7 +19,7 @@ class MinimaxAI extends AIStrategy {
   }
 
   getName() {
-    return `Minimax (depth ${this.depth})`;
+    return `minimax ${this.depth}`;
   }
 
   getDescription() {

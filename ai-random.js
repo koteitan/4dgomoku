@@ -4,7 +4,7 @@
  */
 class RandomAI extends AIStrategy {
   getName() {
-    return 'Random';
+    return 'random';
   }
 
   getDescription() {
