@@ -70,6 +70,7 @@ class Game4D {
     this.winningLine = null;
     this.moveCount = 0;
     this.lastMove = null;
+    this.history = [];
   }
 
   /**
@@ -91,6 +92,7 @@ class Game4D {
 
     this.board[x][y][z][w] = this.currentPlayer;
     this.lastMove = { x, y, z, w, player: this.currentPlayer };
+    this.history.push({ x, y, z, w, player: this.currentPlayer });
     this.moveCount++;
 
     // 勝利判定
@@ -298,6 +300,18 @@ class Game4D {
   }
 
   /**
+   * 履歴をダンプ（デバッグ用）
+   */
+  dumphist() {
+    let output = '';
+    this.history.forEach((move, index) => {
+      const playerName = move.player === 1 ? 'you' : 'com';
+      output += `${index + 1}:${playerName}:(${move.x},${move.y},${move.z},${move.w})\n`;
+    });
+    console.log(output);
+  }
+
+  /**
    * ゲーム状態をクローン
    */
   clone() {
@@ -335,7 +349,8 @@ class GameUI {
     this.ai = null;
     this.playerColor = 1; // 1: 黒(先手), 2: 白(後手)
     this.isThinking = false;
-    this.hoveredCell = null;
+    this.hoveredCell = null;      // ホバー中の空セル
+    this.hoveredStone = null;     // ホバー中の石
 
     // サイズ計算
     this.calculateSize();
@@ -345,6 +360,7 @@ class GameUI {
     canvas.addEventListener('mousemove', this.handleMouseMove.bind(this));
     canvas.addEventListener('mouseleave', () => {
       this.hoveredCell = null;
+      this.hoveredStone = null;
       this.draw();
     });
 
@@ -423,7 +439,8 @@ class GameUI {
    */
   handleClick(event) {
     if (this.isThinking || this.game.winner !== null) return;
-    if (this.game.currentPlayer !== this.playerColor) return;
+    // AIがある場合のみ、プレイヤーのターンかチェック
+    if (this.ai && this.game.currentPlayer !== this.playerColor) return;
 
     const coords = this.getCoordinatesFromEvent(event);
     if (!coords) return;
@@ -444,16 +461,26 @@ class GameUI {
    */
   handleMouseMove(event) {
     const coords = this.getCoordinatesFromEvent(event);
-    const prevHovered = this.hoveredCell;
+    const prevHoveredCell = this.hoveredCell;
+    const prevHoveredStone = this.hoveredStone;
 
-    if (coords && this.game.board[coords.x][coords.y][coords.z][coords.w] === 0) {
-      this.hoveredCell = coords;
+    if (coords) {
+      const cellValue = this.game.board[coords.x][coords.y][coords.z][coords.w];
+      if (cellValue === 0) {
+        this.hoveredCell = coords;
+        this.hoveredStone = null;
+      } else {
+        this.hoveredCell = null;
+        this.hoveredStone = { ...coords, player: cellValue };
+      }
     } else {
       this.hoveredCell = null;
+      this.hoveredStone = null;
     }
 
     // 変更があった場合のみ再描画
-    if (JSON.stringify(prevHovered) !== JSON.stringify(this.hoveredCell)) {
+    if (JSON.stringify(prevHoveredCell) !== JSON.stringify(this.hoveredCell) ||
+        JSON.stringify(prevHoveredStone) !== JSON.stringify(this.hoveredStone)) {
       this.draw();
       this.updateCoordInfo(coords);
     }
@@ -571,17 +598,26 @@ class GameUI {
    */
   updateStatus() {
     const status = document.getElementById('status');
+    const isHumanMode = this.ai === null;
 
     if (this.game.winner !== null) {
-      const isPlayerWin = this.game.winner === this.playerColor;
-      status.textContent = isPlayerWin ? 'You Win!' : 'Com Win!';
+      if (isHumanMode) {
+        status.textContent = this.game.winner === 1 ? 'Green Win!' : 'Red Win!';
+      } else {
+        const isPlayerWin = this.game.winner === this.playerColor;
+        status.textContent = isPlayerWin ? 'You Win!' : 'COM Win!';
+      }
       status.className = 'winner';
     } else if (this.isThinking) {
-      status.textContent = 'Com';
+      status.textContent = 'COM';
       status.className = 'thinking';
     } else {
-      const isPlayerTurn = this.game.currentPlayer === this.playerColor;
-      status.textContent = isPlayerTurn ? 'You' : 'Com';
+      if (isHumanMode) {
+        status.textContent = this.game.currentPlayer === 1 ? 'Green' : 'Red';
+      } else {
+        const isPlayerTurn = this.game.currentPlayer === this.playerColor;
+        status.textContent = isPlayerTurn ? 'You' : 'COM';
+      }
       status.className = this.game.currentPlayer === 1 ? 'black-turn' : 'white-turn';
     }
   }
@@ -662,20 +698,21 @@ class GameUI {
       }
     }
 
-    // ホバー表示（同じ行・列・3D行・4D列）
-    if (this.hoveredCell) {
-      const hx = this.hoveredCell.x;
-      const hy = this.hoveredCell.y;
-      const hz = this.hoveredCell.z;
-      const hw = this.hoveredCell.w;
+    // ルーラー表示（同じ行・列・3D行・4D列）
+    const hovered = this.hoveredCell || this.hoveredStone;
+    if (hovered) {
+      const hx = hovered.x;
+      const hy = hovered.y;
+      const hz = hovered.z;
+      const hw = hovered.w;
 
       for (let x = 0; x < SIZE; x++) {
         for (let y = 0; y < SIZE; y++) {
           // このセルが空かチェック
           if (this.game.board[x][y][bz][bw] !== 0) continue;
 
-          // 完全一致（メインホバー）
-          const isMain = (x === hx && y === hy && bz === hz && bw === hw);
+          // 完全一致（メインホバー）- 空セルの場合のみ
+          const isMain = this.hoveredCell && (x === hx && y === hy && bz === hz && bw === hw);
           // 同じ行 (same y, z, w)
           const isSameRow = (y === hy && bz === hz && bw === hw);
           // 同じ列 (same x, z, w)
@@ -687,10 +724,20 @@ class GameUI {
 
           if (isMain) {
             const isProhibited = this.game.isProhibitedMove(x, y, bz, bw);
-            this.drawHoverStone(offsetX, offsetY, x, y, 1.0, isProhibited);
+            this.drawRuler(offsetX, offsetY, x, y, 1.0, isProhibited);
           } else if (isSameRow || isSameCol || isSame3DRow || isSame4DCol) {
-            this.drawHoverStone(offsetX, offsetY, x, y, 0.3, false);
+            this.drawRuler(offsetX, offsetY, x, y, 0.3, false);
           }
+        }
+      }
+    }
+
+    // 連続ガイド表示（石の上にホバー時）
+    if (this.hoveredStone) {
+      const guides = this.getContinuousGuides(this.hoveredStone);
+      for (const guide of guides) {
+        if (guide.z === bz && guide.w === bw) {
+          this.drawContinuousGuide(offsetX, offsetY, guide.x, guide.y, this.hoveredStone.player);
         }
       }
     }
@@ -716,9 +763,9 @@ class GameUI {
   }
 
   /**
-   * ホバー石を描画（フルサイズの四角形）
+   * ルーラーを描画（フルサイズの四角形）
    */
-  drawHoverStone(offsetX, offsetY, x, y, alpha = 1.0, isProhibited = false) {
+  drawRuler(offsetX, offsetY, x, y, alpha = 1.0, isProhibited = false) {
     const ctx = this.ctx;
     const sx = offsetX + this.boardPadding + x * this.cellSize;
     const sy = offsetY + this.boardPadding + y * this.cellSize;
@@ -726,12 +773,95 @@ class GameUI {
     if (isProhibited) {
       // 禁止手は灰色で表示
       ctx.fillStyle = `rgba(128,128,128,${alpha * 0.6})`;
-    } else if (this.playerColor === 1) {
-      ctx.fillStyle = `rgba(34,139,34,${alpha * 0.6})`;
     } else {
-      ctx.fillStyle = `rgba(180,0,0,${alpha * 0.6})`;
+      // AIモードではプレイヤーの色、対人モードでは現在のプレイヤーの色
+      const rulerPlayer = this.ai ? this.playerColor : this.game.currentPlayer;
+      if (rulerPlayer === 1) {
+        ctx.fillStyle = `rgba(34,139,34,${alpha * 0.6})`;
+      } else {
+        ctx.fillStyle = `rgba(180,0,0,${alpha * 0.6})`;
+      }
     }
     ctx.fillRect(sx, sy, this.cellSize, this.cellSize);
+  }
+
+  /**
+   * 連続ガイドを取得（ホバーした石から隣接石がある方向の最初の空きセル）
+   */
+  getContinuousGuides(stone) {
+    const guides = [];
+    const { x, y, z, w, player } = stone;
+
+    for (const dir of this.game.directions) {
+      // 正方向と逆方向の両方をチェック
+      for (const sign of [1, -1]) {
+        // 隣接セル（Moore近傍）をチェック
+        const nx = x + dir[0] * sign;
+        const ny = y + dir[1] * sign;
+        const nz = z + dir[2] * sign;
+        const nw = w + dir[3] * sign;
+
+        // 範囲外チェック
+        if (nx < 0 || nx >= SIZE || ny < 0 || ny >= SIZE ||
+            nz < 0 || nz >= SIZE || nw < 0 || nw >= SIZE) continue;
+
+        // 隣接に同じプレイヤーの石があるか
+        if (this.game.board[nx][ny][nz][nw] !== player) continue;
+
+        // その方向の最初の空きセルを探す
+        for (let i = 1; i < SIZE; i++) {
+          const ex = x + dir[0] * i * sign;
+          const ey = y + dir[1] * i * sign;
+          const ez = z + dir[2] * i * sign;
+          const ew = w + dir[3] * i * sign;
+
+          if (ex < 0 || ex >= SIZE || ey < 0 || ey >= SIZE ||
+              ez < 0 || ez >= SIZE || ew < 0 || ew >= SIZE) break;
+
+          const cell = this.game.board[ex][ey][ez][ew];
+          if (cell === 0) {
+            guides.push({ x: ex, y: ey, z: ez, w: ew });
+            break;
+          } else if (cell !== player) {
+            break;
+          }
+        }
+
+        // 逆方向も探す（この方向の反対側）
+        for (let i = 1; i < SIZE; i++) {
+          const ex = x - dir[0] * i * sign;
+          const ey = y - dir[1] * i * sign;
+          const ez = z - dir[2] * i * sign;
+          const ew = w - dir[3] * i * sign;
+
+          if (ex < 0 || ex >= SIZE || ey < 0 || ey >= SIZE ||
+              ez < 0 || ez >= SIZE || ew < 0 || ew >= SIZE) break;
+
+          const cell = this.game.board[ex][ey][ez][ew];
+          if (cell === 0) {
+            guides.push({ x: ex, y: ey, z: ez, w: ew });
+            break;
+          } else if (cell !== player) {
+            break;
+          }
+        }
+      }
+    }
+
+    return guides;
+  }
+
+  /**
+   * 連続ガイドを描画（枠線のみ）
+   */
+  drawContinuousGuide(offsetX, offsetY, x, y, player) {
+    const ctx = this.ctx;
+    const sx = offsetX + this.boardPadding + x * this.cellSize;
+    const sy = offsetY + this.boardPadding + y * this.cellSize;
+
+    ctx.strokeStyle = player === 1 ? '#228B22' : '#8B0000';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(sx + 0.5, sy + 0.5, this.cellSize - 1, this.cellSize - 1);
   }
 
   /**
@@ -760,6 +890,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // AI選択肢を設定
   const aiSelect = document.getElementById('aiSelect');
+
+  // humanオプションを最初に追加
+  const humanOption = document.createElement('option');
+  humanOption.value = 'human';
+  humanOption.textContent = 'human';
+  humanOption.title = '2人対戦';
+  aiSelect.appendChild(humanOption);
+
   const ais = AIRegistry.getAll();
   ais.forEach(ai => {
     const option = document.createElement('option');
@@ -775,7 +913,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // イベントリスナー
   aiSelect.addEventListener('change', () => {
-    ui.setAI(AIRegistry.get(aiSelect.value));
+    const value = aiSelect.value;
+    ui.setAI(value === 'human' ? null : AIRegistry.get(value));
   });
 
   document.getElementById('playerColor').addEventListener('change', (e) => {
@@ -788,4 +927,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 初期表示
   ui.updateStatus();
+
+  // デバッグ用グローバルアクセス
+  window.gameUI = ui;
+  window.dumpHist = () => ui.game.dumpHist();
 });
