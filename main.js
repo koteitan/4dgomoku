@@ -3,8 +3,19 @@
  */
 
 // 定数
-const SIZE = 9;
+let SIZE = { x: 9, y: 9, z: 9, w: 9 };
 const WIN_LENGTH = 5;
+
+// 最大サイズを取得
+function getMaxSize() {
+  return Math.max(SIZE.x, SIZE.y, SIZE.z, SIZE.w);
+}
+
+// 範囲内かチェック
+function inBounds(x, y, z, w) {
+  return x >= 0 && x < SIZE.x && y >= 0 && y < SIZE.y &&
+         z >= 0 && z < SIZE.z && w >= 0 && w < SIZE.w;
+}
 
 /**
  * 4次元空間のすべての方向ベクトルを生成
@@ -45,22 +56,23 @@ function generateDirections() {
  * Game4D - 4次元五目並べのゲーム状態を管理
  */
 class Game4D {
-  constructor() {
+  constructor(stickyMode = false) {
     this.size = SIZE;
     this.winLength = WIN_LENGTH;
     this.directions = generateDirections();
+    this.stickyMode = stickyMode;
     this.reset();
   }
 
   reset() {
     // 4次元配列を初期化 (0: 空, 1: 黒, 2: 白)
-    this.board = new Array(SIZE);
-    for (let x = 0; x < SIZE; x++) {
-      this.board[x] = new Array(SIZE);
-      for (let y = 0; y < SIZE; y++) {
-        this.board[x][y] = new Array(SIZE);
-        for (let z = 0; z < SIZE; z++) {
-          this.board[x][y][z] = new Array(SIZE).fill(0);
+    this.board = new Array(SIZE.x);
+    for (let x = 0; x < SIZE.x; x++) {
+      this.board[x] = new Array(SIZE.y);
+      for (let y = 0; y < SIZE.y; y++) {
+        this.board[x][y] = new Array(SIZE.z);
+        for (let z = 0; z < SIZE.z; z++) {
+          this.board[x][y][z] = new Array(SIZE.w).fill(0);
         }
       }
     }
@@ -79,8 +91,7 @@ class Game4D {
    */
   placeStone(x, y, z, w, skipDoubleThreeCheck = false) {
     if (this.winner !== null) return false;
-    if (x < 0 || x >= SIZE || y < 0 || y >= SIZE ||
-        z < 0 || z >= SIZE || w < 0 || w >= SIZE) return false;
+    if (!inBounds(x, y, z, w)) return false;
     if (this.board[x][y][z][w] !== 0) return false;
 
     // 三三禁止チェック（先手のみ、勝ちになる手は除く）
@@ -180,14 +191,13 @@ class Game4D {
     let stones = 0;
     let open = false;
 
-    for (let i = 1; i < SIZE; i++) {
+    for (let i = 1; i < getMaxSize(); i++) {
       const nx = x + dir[0] * i * sign;
       const ny = y + dir[1] * i * sign;
       const nz = z + dir[2] * i * sign;
       const nw = w + dir[3] * i * sign;
 
-      if (nx < 0 || nx >= SIZE || ny < 0 || ny >= SIZE ||
-          nz < 0 || nz >= SIZE || nw < 0 || nw >= SIZE) {
+      if (!inBounds(nx, ny, nz, nw)) {
         open = false;
         break;
       }
@@ -233,14 +243,13 @@ class Game4D {
     let count = 1;
 
     // 正方向
-    for (let i = 1; i < SIZE; i++) {
+    for (let i = 1; i < getMaxSize(); i++) {
       const nx = x + dir[0] * i;
       const ny = y + dir[1] * i;
       const nz = z + dir[2] * i;
       const nw = w + dir[3] * i;
 
-      if (nx < 0 || nx >= SIZE || ny < 0 || ny >= SIZE ||
-          nz < 0 || nz >= SIZE || nw < 0 || nw >= SIZE) break;
+      if (!inBounds(nx, ny, nz, nw)) break;
       if (this.board[nx][ny][nz][nw] !== player) break;
 
       count++;
@@ -248,14 +257,13 @@ class Game4D {
     }
 
     // 負方向
-    for (let i = 1; i < SIZE; i++) {
+    for (let i = 1; i < getMaxSize(); i++) {
       const nx = x - dir[0] * i;
       const ny = y - dir[1] * i;
       const nz = z - dir[2] * i;
       const nw = w - dir[3] * i;
 
-      if (nx < 0 || nx >= SIZE || ny < 0 || ny >= SIZE ||
-          nz < 0 || nz >= SIZE || nw < 0 || nw >= SIZE) break;
+      if (!inBounds(nx, ny, nz, nw)) break;
       if (this.board[nx][ny][nz][nw] !== player) break;
 
       count++;
@@ -270,10 +278,10 @@ class Game4D {
    */
   getValidMoves(includeProhibited = false) {
     const moves = [];
-    for (let x = 0; x < SIZE; x++) {
-      for (let y = 0; y < SIZE; y++) {
-        for (let z = 0; z < SIZE; z++) {
-          for (let w = 0; w < SIZE; w++) {
+    for (let x = 0; x < SIZE.x; x++) {
+      for (let y = 0; y < SIZE.y; y++) {
+        for (let z = 0; z < SIZE.z; z++) {
+          for (let w = 0; w < SIZE.w; w++) {
             if (this.board[x][y][z][w] === 0) {
               // 三三禁止チェック（先手のみ）
               if (!includeProhibited && this.currentPlayer === 1) {
@@ -312,20 +320,44 @@ class Game4D {
   }
 
   /**
+   * Neumann近傍（直交方向）に石があるかチェック
+   */
+  hasNeumannNeighbor(x, y, z, w) {
+    const neumannDirs = [
+      [1, 0, 0, 0], [-1, 0, 0, 0],
+      [0, 1, 0, 0], [0, -1, 0, 0],
+      [0, 0, 1, 0], [0, 0, -1, 0],
+      [0, 0, 0, 1], [0, 0, 0, -1]
+    ];
+
+    for (const dir of neumannDirs) {
+      const nx = x + dir[0];
+      const ny = y + dir[1];
+      const nz = z + dir[2];
+      const nw = w + dir[3];
+
+      if (inBounds(nx, ny, nz, nw) && this.board[nx][ny][nz][nw] !== 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * ゲーム状態をクローン
    */
   clone() {
-    const newGame = new Game4D();
+    const newGame = new Game4D(this.stickyMode);
     newGame.currentPlayer = this.currentPlayer;
     newGame.winner = this.winner;
     newGame.moveCount = this.moveCount;
     newGame.lastMove = this.lastMove ? { ...this.lastMove } : null;
 
     // 盤面をコピー
-    for (let x = 0; x < SIZE; x++) {
-      for (let y = 0; y < SIZE; y++) {
-        for (let z = 0; z < SIZE; z++) {
-          for (let w = 0; w < SIZE; w++) {
+    for (let x = 0; x < SIZE.x; x++) {
+      for (let y = 0; y < SIZE.y; y++) {
+        for (let z = 0; z < SIZE.z; z++) {
+          for (let w = 0; w < SIZE.w; w++) {
             newGame.board[x][y][z][w] = this.board[x][y][z][w];
           }
         }
@@ -345,7 +377,8 @@ class GameUI {
     this.ctx = canvas.getContext('2d');
 
     // ゲーム状態
-    this.game = new Game4D();
+    this.stickyMode = false;      // stickyモード
+    this.game = new Game4D(this.stickyMode);
     this.ai = null;
     this.playerColor = 1; // 1: 黒(先手), 2: 白(後手)
     this.isThinking = false;
@@ -364,7 +397,6 @@ class GameUI {
       this.draw();
     });
 
-    // ウィンドウリサイズ時に再計算
     window.addEventListener('resize', () => {
       this.calculateSize();
       this.draw();
@@ -374,43 +406,32 @@ class GameUI {
   }
 
   /**
-   * ウィンドウサイズに基づいてボードサイズを計算
+   * ボードサイズを計算（ウィンドウに合わせる）
    */
   calculateSize() {
-    // キャンバスコンテナの位置を取得してヘッダー分を計算
-    const container = this.canvas.parentElement;
-    const containerRect = container.getBoundingClientRect();
-    const headerHeight = containerRect.top;
-
-    // 利用可能なサイズを計算（余裕を持たせる）
-    const padding = 80;
-    const availableWidth = window.innerWidth - padding;
-    const availableHeight = window.innerHeight - headerHeight - padding;
-    const available = Math.min(availableWidth, availableHeight) * 0.95;
-
-    // セルサイズを計算（最小3px、最大12px）
-    const gaps = SIZE - 1; // ボード間のギャップ数
-
-    // (cellSize * 9 + padding * 2 + gap) * 9 - gap = available
-    this.boardGap = Math.max(2, Math.floor(available / 200));
+    this.boardGap = 4;
     this.boardPadding = 1;
     this.labelSpace = 0;
 
-    const spaceForCells = available - (this.boardGap * gaps) - (this.boardPadding * 2 * SIZE);
-    this.cellSize = Math.floor(spaceForCells / (SIZE * SIZE));
-    this.cellSize = Math.max(3, Math.min(12, this.cellSize));
+    // ウィンドウサイズから利用可能な領域を計算
+    const padding = 40;
+    const availableWidth = window.innerWidth - padding;
+    const availableHeight = window.innerHeight - 150;
 
-    this.boardSize = this.cellSize * SIZE + this.boardPadding * 2;
-    this.totalSize = (this.boardSize + this.boardGap) * SIZE - this.boardGap;
+    // totalWidth = (cellSize * SIZE.x + boardPadding * 2) * SIZE.z + boardGap * (SIZE.z - 1)
+    // -> cellSize = (availableWidth - boardPadding * 2 * SIZE.z - boardGap * (SIZE.z - 1)) / (SIZE.x * SIZE.z)
+    const cellSizeFromWidth = (availableWidth - this.boardPadding * 2 * SIZE.z - this.boardGap * (SIZE.z - 1)) / (SIZE.x * SIZE.z);
+    const cellSizeFromHeight = (availableHeight - this.boardPadding * 2 * SIZE.w - this.boardGap * (SIZE.w - 1)) / (SIZE.y * SIZE.w);
+    this.cellSize = Math.floor(Math.min(cellSizeFromWidth, cellSizeFromHeight));
+    this.cellSize = Math.max(3, this.cellSize);
 
-    this.canvas.width = this.totalSize;
-    this.canvas.height = this.totalSize;
+    this.boardSizeX = this.cellSize * SIZE.x + this.boardPadding * 2;
+    this.boardSizeY = this.cellSize * SIZE.y + this.boardPadding * 2;
+    this.totalWidth = (this.boardSizeX + this.boardGap) * SIZE.z - this.boardGap;
+    this.totalHeight = (this.boardSizeY + this.boardGap) * SIZE.w - this.boardGap;
 
-    // コントロールパネルの幅をキャンバスに合わせる
-    const controls = document.querySelector('.controls');
-    if (controls) {
-      controls.style.width = this.totalSize + 'px';
-    }
+    this.canvas.width = this.totalWidth;
+    this.canvas.height = this.totalHeight;
   }
 
   setAI(ai) {
@@ -421,10 +442,28 @@ class GameUI {
     this.playerColor = color;
   }
 
+  setStickyMode(sticky) {
+    this.stickyMode = sticky;
+    this.game.stickyMode = sticky;
+  }
+
+  setBoardSize(x, y, z, w) {
+    SIZE = { x, y, z, w };
+    this.game = new Game4D(this.stickyMode);
+    this.calculateSize();
+    this.newGame();
+    // サブタイトル更新
+    const subtitle = document.querySelector('.subtitle');
+    if (subtitle) {
+      subtitle.textContent = `四次元五目並べ (${x}x${y}x${z}x${w})`;
+    }
+  }
+
   newGame() {
     this.game.reset();
     this.isThinking = false;
     this.hoveredCell = null;
+    this.hoveredStone = null;
     this.draw();
     this.updateStatus();
 
@@ -446,6 +485,14 @@ class GameUI {
     if (!coords) return;
 
     const { x, y, z, w } = coords;
+
+    // stickyモード: 最初の手以外はNeumann近傍のみ
+    if (this.stickyMode && this.game.moveCount > 0) {
+      if (!this.game.hasNeumannNeighbor(x, y, z, w)) {
+        return;
+      }
+    }
+
     if (this.game.placeStone(x, y, z, w)) {
       this.draw();
       this.updateStatus();
@@ -497,19 +544,19 @@ class GameUI {
     const canvasY = (event.clientY - rect.top) * scaleY - this.labelSpace;
 
     // どのボードか特定 (z, w)
-    const boardW = Math.floor(canvasY / (this.boardSize + this.boardGap));
-    const boardZ = Math.floor(canvasX / (this.boardSize + this.boardGap));
+    const boardW = Math.floor(canvasY / (this.boardSizeY + this.boardGap));
+    const boardZ = Math.floor(canvasX / (this.boardSizeX + this.boardGap));
 
-    if (boardZ < 0 || boardZ >= SIZE || boardW < 0 || boardW >= SIZE) return null;
+    if (boardZ < 0 || boardZ >= SIZE.z || boardW < 0 || boardW >= SIZE.w) return null;
 
     // ボード内の位置 (x, y)
-    const localX = canvasX - boardZ * (this.boardSize + this.boardGap) - this.boardPadding;
-    const localY = canvasY - boardW * (this.boardSize + this.boardGap) - this.boardPadding;
+    const localX = canvasX - boardZ * (this.boardSizeX + this.boardGap) - this.boardPadding;
+    const localY = canvasY - boardW * (this.boardSizeY + this.boardGap) - this.boardPadding;
 
     const x = Math.floor(localX / this.cellSize);
     const y = Math.floor(localY / this.cellSize);
 
-    if (x < 0 || x >= SIZE || y < 0 || y >= SIZE) return null;
+    if (x < 0 || x >= SIZE.x || y < 0 || y >= SIZE.y) return null;
 
     return { x, y, z: boardZ, w: boardW };
   }
@@ -548,14 +595,23 @@ class GameUI {
         ${AIStrategy.toString()}
         ${MinimaxAI.toString()}
 
-        const SIZE = ${SIZE};
+        const SIZE = ${JSON.stringify(SIZE)};
         const WIN_LENGTH = ${WIN_LENGTH};
 
+        function getMaxSize() {
+          return Math.max(SIZE.x, SIZE.y, SIZE.z, SIZE.w);
+        }
+
+        function inBounds(x, y, z, w) {
+          return x >= 0 && x < SIZE.x && y >= 0 && y < SIZE.y &&
+                 z >= 0 && z < SIZE.z && w >= 0 && w < SIZE.w;
+        }
+
         self.onmessage = function(e) {
-          const { board, currentPlayer, moveCount, depth } = e.data;
+          const { board, currentPlayer, moveCount, depth, stickyMode } = e.data;
 
           // ゲーム状態を復元
-          const game = new Game4D();
+          const game = new Game4D(stickyMode);
           game.board = board;
           game.currentPlayer = currentPlayer;
           game.moveCount = moveCount;
@@ -588,6 +644,7 @@ class GameUI {
         board: this.game.board,
         currentPlayer: this.game.currentPlayer,
         moveCount: this.game.moveCount,
+        stickyMode: this.stickyMode,
         depth: this.ai.depth || 3
       });
     });
@@ -641,8 +698,8 @@ class GameUI {
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
     // 各ボードを描画
-    for (let bz = 0; bz < SIZE; bz++) {
-      for (let bw = 0; bw < SIZE; bw++) {
+    for (let bz = 0; bz < SIZE.z; bz++) {
+      for (let bw = 0; bw < SIZE.w; bw++) {
         this.drawBoard(bz, bw);
       }
     }
@@ -658,34 +715,36 @@ class GameUI {
    */
   drawBoard(bz, bw) {
     const ctx = this.ctx;
-    const offsetX = this.labelSpace + bz * (this.boardSize + this.boardGap);
-    const offsetY = this.labelSpace + bw * (this.boardSize + this.boardGap);
+    const offsetX = this.labelSpace + bz * (this.boardSizeX + this.boardGap);
+    const offsetY = this.labelSpace + bw * (this.boardSizeY + this.boardGap);
 
     // ボード背景
     ctx.fillStyle = '#111';
-    ctx.fillRect(offsetX, offsetY, this.boardSize, this.boardSize);
+    ctx.fillRect(offsetX, offsetY, this.boardSizeX, this.boardSizeY);
 
     // グリッド線
     ctx.strokeStyle = '#333';
     ctx.lineWidth = 0.5;
 
-    for (let i = 0; i <= SIZE; i++) {
+    for (let i = 0; i <= SIZE.x; i++) {
       // 縦線
       ctx.beginPath();
       ctx.moveTo(offsetX + this.boardPadding + i * this.cellSize, offsetY + this.boardPadding);
-      ctx.lineTo(offsetX + this.boardPadding + i * this.cellSize, offsetY + this.boardSize - this.boardPadding);
+      ctx.lineTo(offsetX + this.boardPadding + i * this.cellSize, offsetY + this.boardSizeY - this.boardPadding);
       ctx.stroke();
+    }
 
+    for (let i = 0; i <= SIZE.y; i++) {
       // 横線
       ctx.beginPath();
       ctx.moveTo(offsetX + this.boardPadding, offsetY + this.boardPadding + i * this.cellSize);
-      ctx.lineTo(offsetX + this.boardSize - this.boardPadding, offsetY + this.boardPadding + i * this.cellSize);
+      ctx.lineTo(offsetX + this.boardSizeX - this.boardPadding, offsetY + this.boardPadding + i * this.cellSize);
       ctx.stroke();
     }
 
     // 石を描画
-    for (let x = 0; x < SIZE; x++) {
-      for (let y = 0; y < SIZE; y++) {
+    for (let x = 0; x < SIZE.x; x++) {
+      for (let y = 0; y < SIZE.y; y++) {
         const stone = this.game.board[x][y][bz][bw];
         if (stone !== 0) {
           const isLastMove = this.game.lastMove &&
@@ -706,8 +765,8 @@ class GameUI {
       const hz = hovered.z;
       const hw = hovered.w;
 
-      for (let x = 0; x < SIZE; x++) {
-        for (let y = 0; y < SIZE; y++) {
+      for (let x = 0; x < SIZE.x; x++) {
+        for (let y = 0; y < SIZE.y; y++) {
           // このセルが空かチェック
           if (this.game.board[x][y][bz][bw] !== 0) continue;
 
@@ -802,21 +861,19 @@ class GameUI {
         const nw = w + dir[3] * sign;
 
         // 範囲外チェック
-        if (nx < 0 || nx >= SIZE || ny < 0 || ny >= SIZE ||
-            nz < 0 || nz >= SIZE || nw < 0 || nw >= SIZE) continue;
+        if (!inBounds(nx, ny, nz, nw)) continue;
 
         // 隣接に同じプレイヤーの石があるか
         if (this.game.board[nx][ny][nz][nw] !== player) continue;
 
         // その方向の最初の空きセルを探す
-        for (let i = 1; i < SIZE; i++) {
+        for (let i = 1; i < getMaxSize(); i++) {
           const ex = x + dir[0] * i * sign;
           const ey = y + dir[1] * i * sign;
           const ez = z + dir[2] * i * sign;
           const ew = w + dir[3] * i * sign;
 
-          if (ex < 0 || ex >= SIZE || ey < 0 || ey >= SIZE ||
-              ez < 0 || ez >= SIZE || ew < 0 || ew >= SIZE) break;
+          if (!inBounds(ex, ey, ez, ew)) break;
 
           const cell = this.game.board[ex][ey][ez][ew];
           if (cell === 0) {
@@ -828,14 +885,13 @@ class GameUI {
         }
 
         // 逆方向も探す（この方向の反対側）
-        for (let i = 1; i < SIZE; i++) {
+        for (let i = 1; i < getMaxSize(); i++) {
           const ex = x - dir[0] * i * sign;
           const ey = y - dir[1] * i * sign;
           const ez = z - dir[2] * i * sign;
           const ew = w - dir[3] * i * sign;
 
-          if (ex < 0 || ex >= SIZE || ey < 0 || ey >= SIZE ||
-              ez < 0 || ez >= SIZE || ew < 0 || ew >= SIZE) break;
+          if (!inBounds(ex, ey, ez, ew)) break;
 
           const cell = this.game.board[ex][ey][ez][ew];
           if (cell === 0) {
@@ -871,8 +927,8 @@ class GameUI {
     const ctx = this.ctx;
 
     for (const pos of this.game.winningLine) {
-      const offsetX = this.labelSpace + pos.z * (this.boardSize + this.boardGap);
-      const offsetY = this.labelSpace + pos.w * (this.boardSize + this.boardGap);
+      const offsetX = this.labelSpace + pos.z * (this.boardSizeX + this.boardGap);
+      const offsetY = this.labelSpace + pos.w * (this.boardSizeY + this.boardGap);
       const sx = offsetX + this.boardPadding + pos.x * this.cellSize;
       const sy = offsetY + this.boardPadding + pos.y * this.cellSize;
 
@@ -917,8 +973,31 @@ document.addEventListener('DOMContentLoaded', () => {
     ui.setAI(value === 'human' ? null : AIRegistry.get(value));
   });
 
+  // サイズ変更時にゲームをリセット
+  const updateBoardSize = () => {
+    const x = parseInt(document.getElementById('sizeX').value) || 9;
+    const y = parseInt(document.getElementById('sizeY').value) || 9;
+    const z = parseInt(document.getElementById('sizeZ').value) || 9;
+    const w = parseInt(document.getElementById('sizeW').value) || 9;
+    ui.setBoardSize(
+      Math.max(1, Math.min(15, x)),
+      Math.max(1, Math.min(15, y)),
+      Math.max(1, Math.min(15, z)),
+      Math.max(1, Math.min(15, w))
+    );
+  };
+
+  document.getElementById('sizeX').addEventListener('change', updateBoardSize);
+  document.getElementById('sizeY').addEventListener('change', updateBoardSize);
+  document.getElementById('sizeZ').addEventListener('change', updateBoardSize);
+  document.getElementById('sizeW').addEventListener('change', updateBoardSize);
+
   document.getElementById('playerColor').addEventListener('change', (e) => {
     ui.setPlayerColor(e.target.value === 'black' ? 1 : 2);
+  });
+
+  document.getElementById('stickyMode').addEventListener('change', (e) => {
+    ui.setStickyMode(e.target.value === 'sticky');
   });
 
   document.getElementById('newGameBtn').addEventListener('click', () => {
@@ -930,5 +1009,5 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // デバッグ用グローバルアクセス
   window.gameUI = ui;
-  window.dumpHist = () => ui.game.dumpHist();
+  window.dumphist = () => ui.game.dumphist();
 });

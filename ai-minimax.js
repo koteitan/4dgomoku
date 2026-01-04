@@ -32,7 +32,12 @@ class MinimaxAI extends AIStrategy {
 
     // 最初の手は中央付近
     if (game.moveCount === 0) {
-      return { x: 4, y: 4, z: 4, w: 4 };
+      return {
+        x: Math.floor(game.size.x / 2),
+        y: Math.floor(game.size.y / 2),
+        z: Math.floor(game.size.z / 2),
+        w: Math.floor(game.size.w / 2)
+      };
     }
 
     // 即勝ち・即負け防御をチェック
@@ -151,29 +156,66 @@ class MinimaxAI extends AIStrategy {
     const candidates = new Set();
     const SIZE = game.size;
 
-    // 既存の石の周辺をチェック
-    for (let x = 0; x < SIZE; x++) {
-      for (let y = 0; y < SIZE; y++) {
-        for (let z = 0; z < SIZE; z++) {
-          for (let w = 0; w < SIZE; w++) {
-            if (game.board[x][y][z][w] !== 0) {
-              // この石の周辺をチェック
-              for (let dx = -radius; dx <= radius; dx++) {
-                for (let dy = -radius; dy <= radius; dy++) {
-                  for (let dz = -radius; dz <= radius; dz++) {
-                    for (let dw = -radius; dw <= radius; dw++) {
-                      const nx = x + dx;
-                      const ny = y + dy;
-                      const nz = z + dz;
-                      const nw = w + dw;
-                      if (
-                        nx >= 0 && nx < SIZE &&
-                        ny >= 0 && ny < SIZE &&
-                        nz >= 0 && nz < SIZE &&
-                        nw >= 0 && nw < SIZE &&
-                        game.board[nx][ny][nz][nw] === 0
-                      ) {
-                        candidates.add(`${nx},${ny},${nz},${nw}`);
+    // stickyモードの場合はNeumann近傍のみ
+    if (game.stickyMode && game.moveCount > 0) {
+      const neumannDirs = [
+        [1, 0, 0, 0], [-1, 0, 0, 0],
+        [0, 1, 0, 0], [0, -1, 0, 0],
+        [0, 0, 1, 0], [0, 0, -1, 0],
+        [0, 0, 0, 1], [0, 0, 0, -1]
+      ];
+
+      for (let x = 0; x < SIZE.x; x++) {
+        for (let y = 0; y < SIZE.y; y++) {
+          for (let z = 0; z < SIZE.z; z++) {
+            for (let w = 0; w < SIZE.w; w++) {
+              if (game.board[x][y][z][w] !== 0) {
+                // Neumann近傍のみをチェック
+                for (const dir of neumannDirs) {
+                  const nx = x + dir[0];
+                  const ny = y + dir[1];
+                  const nz = z + dir[2];
+                  const nw = w + dir[3];
+                  if (
+                    nx >= 0 && nx < SIZE.x &&
+                    ny >= 0 && ny < SIZE.y &&
+                    nz >= 0 && nz < SIZE.z &&
+                    nw >= 0 && nw < SIZE.w &&
+                    game.board[nx][ny][nz][nw] === 0
+                  ) {
+                    candidates.add(`${nx},${ny},${nz},${nw}`);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    } else {
+      // 通常モード: 既存の石の周辺をチェック
+      for (let x = 0; x < SIZE.x; x++) {
+        for (let y = 0; y < SIZE.y; y++) {
+          for (let z = 0; z < SIZE.z; z++) {
+            for (let w = 0; w < SIZE.w; w++) {
+              if (game.board[x][y][z][w] !== 0) {
+                // この石の周辺をチェック
+                for (let dx = -radius; dx <= radius; dx++) {
+                  for (let dy = -radius; dy <= radius; dy++) {
+                    for (let dz = -radius; dz <= radius; dz++) {
+                      for (let dw = -radius; dw <= radius; dw++) {
+                        const nx = x + dx;
+                        const ny = y + dy;
+                        const nz = z + dz;
+                        const nw = w + dw;
+                        if (
+                          nx >= 0 && nx < SIZE.x &&
+                          ny >= 0 && ny < SIZE.y &&
+                          nz >= 0 && nz < SIZE.z &&
+                          nw >= 0 && nw < SIZE.w &&
+                          game.board[nx][ny][nz][nw] === 0
+                        ) {
+                          candidates.add(`${nx},${ny},${nz},${nw}`);
+                        }
                       }
                     }
                   }
@@ -190,6 +232,11 @@ class MinimaxAI extends AIStrategy {
       const [x, y, z, w] = str.split(',').map(Number);
       return { x, y, z, w };
     });
+
+    // stickyモード: Neumann近傍チェック（安全のため二重チェック）
+    if (game.stickyMode && game.moveCount > 0) {
+      moves = moves.filter(move => game.hasNeumannNeighbor(move.x, move.y, move.z, move.w));
+    }
 
     // 三三禁止ルール：先手（プレイヤー1）の場合、禁止手を除外
     if (game.currentPlayer === 1) {
@@ -227,9 +274,12 @@ class MinimaxAI extends AIStrategy {
     }
 
     // 中央に近いほどボーナス
-    const center = (game.size - 1) / 2;
-    const distFromCenter = Math.abs(move.x - center) + Math.abs(move.y - center) +
-                          Math.abs(move.z - center) + Math.abs(move.w - center);
+    const centerX = (game.size.x - 1) / 2;
+    const centerY = (game.size.y - 1) / 2;
+    const centerZ = (game.size.z - 1) / 2;
+    const centerW = (game.size.w - 1) / 2;
+    const distFromCenter = Math.abs(move.x - centerX) + Math.abs(move.y - centerY) +
+                          Math.abs(move.z - centerZ) + Math.abs(move.w - centerW);
     score += (16 - distFromCenter) * 0.1;
 
     return score;
@@ -248,10 +298,10 @@ class MinimaxAI extends AIStrategy {
     // 全方向のラインをチェック
     const checked = new Set();
 
-    for (let x = 0; x < game.size; x++) {
-      for (let y = 0; y < game.size; y++) {
-        for (let z = 0; z < game.size; z++) {
-          for (let w = 0; w < game.size; w++) {
+    for (let x = 0; x < game.size.x; x++) {
+      for (let y = 0; y < game.size.y; y++) {
+        for (let z = 0; z < game.size.z; z++) {
+          for (let w = 0; w < game.size.w; w++) {
             if (game.board[x][y][z][w] !== 0) {
               for (const dir of game.directions) {
                 const key = this.getLineKey(x, y, z, w, dir);
@@ -290,8 +340,8 @@ class MinimaxAI extends AIStrategy {
       const nz = z + dir[2] * i;
       const nw = w + dir[3] * i;
 
-      if (nx < 0 || nx >= SIZE || ny < 0 || ny >= SIZE ||
-          nz < 0 || nz >= SIZE || nw < 0 || nw >= SIZE) {
+      if (nx < 0 || nx >= SIZE.x || ny < 0 || ny >= SIZE.y ||
+          nz < 0 || nz >= SIZE.z || nw < 0 || nw >= SIZE.w) {
         blocked = true;
         break;
       }
@@ -317,8 +367,8 @@ class MinimaxAI extends AIStrategy {
       const nz = z - dir[2] * i;
       const nw = w - dir[3] * i;
 
-      if (nx < 0 || nx >= SIZE || ny < 0 || ny >= SIZE ||
-          nz < 0 || nz >= SIZE || nw < 0 || nw >= SIZE) {
+      if (nx < 0 || nx >= SIZE.x || ny < 0 || ny >= SIZE.y ||
+          nz < 0 || nz >= SIZE.z || nw < 0 || nw >= SIZE.w) {
         blocked = true;
         break;
       }
@@ -359,8 +409,8 @@ class MinimaxAI extends AIStrategy {
       const nz = z + dir[2] * i;
       const nw = w + dir[3] * i;
 
-      if (nx < 0 || nx >= SIZE || ny < 0 || ny >= SIZE ||
-          nz < 0 || nz >= SIZE || nw < 0 || nw >= SIZE) {
+      if (nx < 0 || nx >= SIZE.x || ny < 0 || ny >= SIZE.y ||
+          nz < 0 || nz >= SIZE.z || nw < 0 || nw >= SIZE.w) {
         blocked = true;
         break;
       }
@@ -384,8 +434,8 @@ class MinimaxAI extends AIStrategy {
       const nz = z - dir[2] * i;
       const nw = w - dir[3] * i;
 
-      if (nx < 0 || nx >= SIZE || ny < 0 || ny >= SIZE ||
-          nz < 0 || nz >= SIZE || nw < 0 || nw >= SIZE) {
+      if (nx < 0 || nx >= SIZE.x || ny < 0 || ny >= SIZE.y ||
+          nz < 0 || nz >= SIZE.z || nw < 0 || nw >= SIZE.w) {
         break;
       }
 
